@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>تحكم</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b0e14;color:#f3f4f6;font-family:Tahoma,Arial,sans-serif}
+#app{max-width:720px;margin:0 auto;padding:10px}
+.card{background:#151a24;border:1px solid #283042;border-radius:12px;padding:12px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+h3{margin:0 0 6px;font-size:16px;color:#ffd666}label{display:block;font-size:13px;margin:8px 0 2px;opacity:.85}
+input[type=text],input[type=number],input[type=password],select{width:100%;padding:9px;border:1px solid #2f3a50;border-radius:8px;background:#0b0e14;color:#fff;font:inherit}
+input[type=color]{width:100%;height:36px;border:0;background:none}
+.btns{display:flex;gap:6px;margin-top:8px}
+button{flex:1;padding:13px 6px;font:inherit;font-size:17px;font-weight:700;border:0;border-radius:10px;background:#2563eb;color:#fff;cursor:pointer}
+button.r{background:#dc2626}button.g{background:#16a34a}button.n{background:#4b5563}button.o{background:#ea580c}
+#st{position:sticky;top:0;z-index:5;background:#0b0e14;padding:8px 4px;font-weight:700}
+#pv{width:100%;aspect-ratio:1300/150;border:0;border-radius:10px;background:#05070b}
+#cm{position:fixed;inset:0;background:#000d;display:none;align-items:center;justify-content:center;z-index:9}
+#cm .box{background:#151a24;border-radius:14px;padding:16px;width:min(340px,94vw);text-align:center}
+#cv{width:240px;height:240px;border-radius:50%;background:repeating-conic-gradient(#222 0 25%,#333 0 50%) 0 0/20px 20px}
+.hint{font-size:12.5px;opacity:.75;line-height:1.8}
+</style></head><body><div id="app">
+<div id="st">⏳ بيتحمل...</div>
+<div class="card"><iframe id="pv" src="/overlay?bg=1"></iframe></div>
+<div class="card" id="pw" style="display:none"><label>الباسورد</label><input type="password" id="pwi"><div class="btns"><button id="pwb">دخول</button></div></div>
+<div class="grid" id="teams"></div>
+<div class="card"><h3>⏱ الفترة والتايمر</h3>
+<label>الفترة (بتظهر جنب السكور بورد)</label>
+<select id="per"><option value="">بدون</option><option>1ST HALF</option><option>2ND HALF</option><option>HALF TIME</option><option>FULL TIME</option><option>OVER TIME</option><option>PENALTIES</option></select>
+<div style="display:flex;gap:8px"><div style="flex:1"><label>دقائق التايمر</label><input type="number" id="tm" min="0"></div><div style="flex:1"><label>ثواني</label><input type="number" id="ts" min="0" max="59" value="0"></div><div style="flex:1"><label>وقت بدل ضائع +</label><input type="number" id="add" min="0"></div></div>
+<div class="btns"><button class="n" id="tset">ضبط</button><button class="g" id="tgo">تشغيل</button><button class="r" id="tstop">إيقاف</button></div>
+<div class="btns"><button class="n" id="tm1">−1 دقيقة</button><button class="n" id="tp1">+1 دقيقة</button><button class="n" id="tcount">تنازلي/تصاعدي</button></div>
+<div class="btns"><button class="o" id="ot">🔥 ابدأ OVER TIME</button></div>
+<label>دقائق الـ Over Time</label><input type="number" id="otm" min="1" value="5">
+<label>الكلمة اللي على الشمال</label><input type="text" id="lbl">
+<label><input type="checkbox" id="go"> أنيميشن GOAL و OVER TIME</label>
+<div class="hint" id="clock"></div></div>
+</div>
+<div id="cm"><div class="box"><canvas id="cv" width="240" height="240"></canvas>
+<label>تكبير</label><input type="range" id="cz" min=".5" max="3" step=".01" value="1" style="width:100%">
+<label>يمين/شمال</label><input type="range" id="cx" min="-100" max="100" value="0" style="width:100%">
+<label>فوق/تحت</label><input type="range" id="cy" min="-100" max="100" value="0" style="width:100%">
+<div class="btns"><button class="g" id="cok">تطبيق</button><button class="n" id="cno">إلغاء</button></div></div></div>
+<script>
+var $=function(i){return document.getElementById(i)},pass='',S={a:{n:'ULC',c:'MAR',s:0,lv:0,k:'#e11d48'},b:{n:'TRB',c:'EGY',s:0,lv:0,k:'#fbbf24'},t:{base:960,run:false,at:0,down:true},lbl:'',per:'',add:0,go:true,ev:null},srv=Date.now(),recv=Date.now(),tm,cimg,ck;
+try{pass=localStorage.getItem('pw')||''}catch(e){}
+function st(m){$('st').textContent=m}
+function el(){var t=S.t;return t.run&&t.at!=='NOW'?(srv-t.at)/1000+(Date.now()-recv)/1000:0}
+function rem(){var t=S.t,e=el();return Math.max(0,Math.floor(t.down?t.base-e:t.base+e))}
+function fmt(v){return String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0')}
+function save(now){clearTimeout(tm);tm=setTimeout(send,now?0:250)}
+async function api(u,body){
+  var r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json','x-pass':pass},body:JSON.stringify(body)});
+  if(r.status===401){$('pw').style.display='block';throw new Error('الباسورد غلط أو مطلوب')}
+  var j=await r.json();if(j.error)throw new Error(j.error);return j;
+}
+async function send(){
+  st('⏳ بيتحفظ...');
+  try{var j=await api('/api/state',{state:S});S.t=j.state.t;S.ev=j.state.ev;srv=j.now;recv=Date.now();st('✅ اتحفظ ويظهر للكل')}
+  catch(e){st('❌ '+e.message)}
+}
+function freeze(){if(S.t.run){S.t.base=rem();S.t.run=false}}
+function start(){if(!S.t.run){S.t.at='NOW';S.t.run=true}}
+function build(){
+  var h='';
+  ['a','b'].forEach(function(k,i){
+    h+='<div class="card"><h3>فريق '+(i?'٢':'١')+'</h3><label>الاسم</label><input type="text" data-k="'+k+'" data-f="n"><label>كود الدولة</label><input type="text" data-k="'+k+'" data-f="c"><label>لون الفريق</label><input type="color" data-k="'+k+'" data-f="k">'+
+    '<label>اللوجو (هيتقص دايرة)</label><input type="file" accept="image/*" data-k="'+k+'" class="fl"><label>اللاعب (اختياري)</label><input type="text" id="p_'+k+'">'+
+    '<div class="btns"><button class="r" data-k="'+k+'" data-d="-1">−</button><button data-k="'+k+'" data-d="1">+ جول</button></div><div class="btns"><button class="n" data-k="'+k+'" data-z="1">صفر</button></div></div>';
+  });
+  $('teams').innerHTML=h;
+  document.querySelectorAll('input[data-f]').forEach(function(e){e.value=S[e.dataset.k][e.dataset.f];e.oninput=function(){S[e.dataset.k][e.dataset.f]=e.value;save()}});
+  document.querySelectorAll('button[data-d]').forEach(function(b){b.onclick=function(){
+    var k=b.dataset.k,t=S[k];
+    if(b.dataset.d<0)t.s=Math.max(0,t.s-1);
+    else{t.s++;var p=$('p_'+k);if(S.go)S.ev={id:'NEW',type:'goal',k:k,p:p.value.trim()};p.value=''}
+    save(1);
+  }});
+  document.querySelectorAll('button[data-z]').forEach(function(b){b.onclick=function(){S[b.dataset.k].s=0;save(1)}});
+  document.querySelectorAll('.fl').forEach(function(e){e.onchange=function(){
+    var f=e.files[0];if(!f)return;var r=new FileReader();
+    r.onload=function(){cimg=new Image();cimg.onload=function(){ck=e.dataset.k;$('cz').value=1;$('cx').value=0;$('cy').value=0;$('cm').style.display='flex';paint($('cv'),240)};cimg.src=r.result};
+    r.readAsDataURL(f);e.value='';
+  }});
+  $('lbl').value=S.lbl;$('lbl').oninput=function(){S.lbl=this.value;save()};
+  $('go').checked=!!S.go;$('go').onchange=function(){S.go=this.checked;save()};
+  $('add').value=S.add||0;$('add').oninput=function(){S.add=+this.value||0;save()};
+  $('per').value=S.per;$('per').onchange=function(){S.per=this.value;if(S.go&&/over/i.test(S.per))S.ev={id:'NEW',type:'text',txt:'OVER TIME'};save(1)};
+  $('tm').value=Math.floor(S.t.base/60);
+  $('tset').onclick=function(){S.t.run=false;S.t.base=(+$('tm').value||0)*60+(+$('ts').value||0);save(1)};
+  $('tgo').onclick=function(){start();save(1)};
+  $('tstop').onclick=function(){freeze();save(1)};
+  $('tp1').onclick=function(){var w=S.t.run;freeze();S.t.base+=60;if(w)start();save(1)};
+  $('tm1').onclick=function(){var w=S.t.run;freeze();S.t.base=Math.max(0,S.t.base-60);if(w)start();save(1)};
+  $('tcount').onclick=function(){var w=S.t.run;freeze();S.t.down=!S.t.down;if(w)start();save(1)};
+  $('ot').onclick=function(){S.per='OVER TIME';$('per').value=S.per;S.t.run=false;S.t.down=true;S.t.base=(+$('otm').value||5)*60;if(S.go)S.ev={id:'NEW',type:'text',txt:'OVER TIME'};save(1)};
+}
+function paint(cv,sz){
+  var z=+$('cz').value,x=+$('cx').value/100,y=+$('cy').value/100,m=Math.min(cimg.width,cimg.height),side=m/z;
+  var sx=(cimg.width-side)/2*(1+x),sy=(cimg.height-side)/2*(1+y);
+  cv.width=cv.height=sz;var g=cv.getContext('2d');g.clearRect(0,0,sz,sz);g.save();g.beginPath();g.arc(sz/2,sz/2,sz/2,0,6.2832);g.clip();g.drawImage(cimg,sx,sy,side,side,0,0,sz,sz);g.restore();
+}
+['cz','cx','cy'].forEach(function(i){$(i).oninput=function(){paint($('cv'),240)}});
+$('cno').onclick=function(){$('cm').style.display='none'};
+$('cok').onclick=async function(){
+  var o=document.createElement('canvas');paint(o,300);$('cm').style.display='none';st('⏳ بيترفع اللوجو...');
+  try{await api('/api/state?logo='+ck,{data:o.toDataURL('image/png')});S[ck].lv=Date.now();save(1)}catch(e){st('❌ '+e.message)}
+};
+$('pwb').onclick=function(){pass=$('pwi').value;try{localStorage.setItem('pw',pass)}catch(e){}$('pw').style.display='none';send()};
+(async function(){
+  try{var r=await fetch('/api/state'),j=await r.json();if(j.error)throw new Error(j.error);if(j.state)S=j.state;srv=j.now;recv=Date.now();if(j.locked&&!pass)$('pw').style.display='block';st('✅ جاهز')}
+  catch(e){st('❌ '+e.message)}
+  build();
+  setInterval(function(){$('clock').textContent='التايمر دلوقتي: '+fmt(rem())+(S.t.run?' ▶':' ⏸')},500);
+})();
+</script></body></html>
